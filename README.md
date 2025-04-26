@@ -100,10 +100,10 @@ Project-to-EPUB supports all file types recognized by Pygments. This includes mo
 
 - Python 3.13+
 - Pygments
-- EbookLib
 - pathspec
 - PyYAML
 - typer
+- Markdown
 
 ## License
 
