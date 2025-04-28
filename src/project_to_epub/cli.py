@@ -42,8 +42,8 @@ def version_callback(value: bool):
 @app.command()
 def main(
     input_directory: Annotated[
-        Path, typer.Argument(help="Path to the project directory to convert")
-    ],
+        Optional[Path], typer.Argument(help="Path to the project directory to convert")
+    ] = None,
     output: Annotated[
         Optional[Path], typer.Option("-o", "--output", help="Output EPUB file path")
     ] = None,
@@ -85,6 +85,16 @@ def main(
         raise typer.Exit(code=1)
     logging.basicConfig(level=numeric_level, format="%(levelname)s: %(message)s")
 
+    # Handle input directory
+    if input_directory is None:
+        input_directory = Path.cwd()
+        logging.info(
+            f"No input directory specified, using current directory: {input_directory}"
+        )
+
+    # Resolve to absolute path to handle relative paths like "." or ".."
+    input_directory = input_directory.resolve()
+
     # Validate input directory
     if not input_directory.exists() or not input_directory.is_dir():
         typer.echo(
@@ -93,13 +103,16 @@ def main(
         )
         raise typer.Exit(code=1)
 
-    # If output is not specified, use the base name of the input directory + .epub
-    if output is None:
-        output = Path(os.getcwd()) / f"{input_directory.name}.epub"
+    # Get the folder name from the resolved absolute path
+    folder_name = input_directory.name
 
-    # If output is a directory, not a file, append the base name of the input directory + .epub
-    if output.exists() and output.is_dir():
-        output = output / f"{input_directory.name}.epub"
+    # Handle output path
+    if output is None:
+        # Default: create in current directory with folder name
+        output = Path.cwd() / f"{folder_name}.epub"
+    elif output.is_dir():
+        # If output is a directory, append the folder name
+        output = output / f"{folder_name}.epub"
 
     # Prepare configuration with defaults and CLI overrides
     config = DEFAULT_CONFIG.copy()
