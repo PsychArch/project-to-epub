@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-to-epub"
-version = "0.1.1"
+version = "0.1.2"
 description = "Convert a software project directory into an EPUB file for offline code reading"
 readme = "README.md"
 authors = [
