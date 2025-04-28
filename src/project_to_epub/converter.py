@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import markdown  # Add markdown import
 import pathspec
 import pygments
+import typer  # Import typer for progress bar
 from pygments import lexers
 from pygments.formatters import HtmlFormatter
 
@@ -269,8 +270,8 @@ def get_css_for_epub() -> str:
         line-height: 1.5;
         overflow-x: auto;
         background-color: #f8f8f8;
-        border: 1px solid #e1e1e8;
-        border-radius: 3px;
+        border: none;
+        border-radius: 0;
     }
 
     .filepath {
@@ -348,9 +349,10 @@ def get_css_for_epub() -> str:
     .markdown-content pre {
         background-color: #f8f8f8;
         padding: 1em;
-        border-radius: 5px;
+        border-radius: 0;
         overflow-x: auto;
         margin-bottom: 1em;
+        border: none;
     }
 
     .markdown-content blockquote {
@@ -441,20 +443,19 @@ def organize_toc_items_by_directory(toc_items: List[Dict[str, str]]) -> List[Dic
     Returns:
         List[Dict]: Hierarchical TOC items with children for subdirectories
     """
-    # Start with intro and other non-file items
-    result = [
-        item for item in toc_items if not item.get("href", "").startswith("file_")
-    ]
+    # Start with non-file items (like TOC page)
+    result = [item for item in toc_items if not item.get("path", "").strip()]
 
     # Group file items by directory
     directory_structure = {}
 
     for item in toc_items:
-        if not item.get("href", "").startswith("file_"):
+        # Skip items without path (like TOC page)
+        if not item.get("path", "").strip():
             continue
 
-        title = item.get("title", "")
-        parts = Path(title).parts
+        path = item.get("path", "")
+        parts = Path(path).parts
 
         # Process only file items with path information
         if len(parts) <= 1:
@@ -549,12 +550,20 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
 
         # If it's a directory (has children)
         if item.get("is_directory", False):
-            # For directories without direct content link
+            # For directories with children
+            first_child_href = "#"
+            if item.get("children") and len(item["children"]) > 0:
+                # Find the first child with an href
+                for child in item["children"]:
+                    if child.get("href"):
+                        first_child_href = child["href"]
+                        break
+
             nav_content = f"""{indent}<navPoint id="{item['id']}" playOrder="{current_play_order}">
 {indent}    <navLabel>
 {indent}        <text>{item['title']}</text>
 {indent}    </navLabel>
-{indent}    <content src="{item['children'][0].get('href', '#')}"/>
+{indent}    <content src="{first_child_href}"/>
 """
             ncx_content.append(nav_content)
 
@@ -676,110 +685,106 @@ def convert_project_to_epub(
     # Scan for files
     project.scan_files()
 
-    # Get metadata
-    metadata = config.get("epub_metadata", {})
-    title = config.get("title") or metadata.get("title") or input_dir.name
-    author = config.get("author") or metadata.get("author") or "Project-to-EPUB Tool"
-    language = metadata.get("language", "en")
+    # Get total number of files for progress bar
+    total_files = len(project.files)
 
-    # Generate a unique identifier for the EPUB
-    identifier = f"urn:uuid:{uuid.uuid4()}"
+    # Create a progress bar
+    with typer.progressbar(
+        length=total_files,
+        label="Converting project to EPUB",
+        show_eta=True,
+        show_pos=True,
+    ) as progress:
 
-    # Set up the highlight formatter
-    theme = config.get("theme") or config.get("default_theme", "default_eink")
-    formatter = create_highlight_formatter(theme)
+        # Get metadata
+        metadata = config.get("epub_metadata", {})
+        title = config.get("title") or metadata.get("title") or input_dir.name
+        author = (
+            config.get("author") or metadata.get("author") or "Project-to-EPUB Tool"
+        )
+        language = metadata.get("language", "en")
 
-    # Create a temporary directory to build the EPUB
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        epub_dir = temp_path / "EPUB"
-        meta_inf_dir = temp_path / "META-INF"
+        # Generate a unique identifier for the EPUB
+        identifier = f"urn:uuid:{uuid.uuid4()}"
 
-        # Create directories
-        epub_dir.mkdir()
-        meta_inf_dir.mkdir()
+        # Set up the highlight formatter
+        theme = config.get("theme") or config.get("default_theme", "default_eink")
+        formatter = create_highlight_formatter(theme)
 
-        # Add mimetype file (must be first in the ZIP and uncompressed)
-        with open(temp_path / "mimetype", "w", encoding="utf-8") as f:
-            f.write("application/epub+zip")
+        # Create a temporary directory to build the EPUB
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            epub_dir = temp_path / "EPUB"
+            meta_inf_dir = temp_path / "META-INF"
 
-        # Add container.xml
-        with open(meta_inf_dir / "container.xml", "w", encoding="utf-8") as f:
-            f.write(
-                """<?xml version="1.0" encoding="UTF-8"?>
+            # Create directories
+            epub_dir.mkdir()
+            meta_inf_dir.mkdir()
+
+            # Add mimetype file (must be first in the ZIP and uncompressed)
+            with open(temp_path / "mimetype", "w", encoding="utf-8") as f:
+                f.write("application/epub+zip")
+
+            # Add container.xml
+            with open(meta_inf_dir / "container.xml", "w", encoding="utf-8") as f:
+                f.write(
+                    """<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
     <rootfiles>
         <rootfile full-path="EPUB/content.opf" media-type="application/oebps-package+xml"/>
     </rootfiles>
 </container>"""
-            )
+                )
 
-        # Add CSS file
-        css_content = get_css_for_epub()
-        with open(epub_dir / "style.css", "w", encoding="utf-8") as f:
-            f.write(css_content)
+            # Add CSS file
+            css_content = get_css_for_epub()
+            with open(epub_dir / "style.css", "w", encoding="utf-8") as f:
+                f.write(css_content)
 
-        # Process each file and create HTML files
-        html_files = []
-        toc_items = []
+            # Process each file and create HTML files
+            html_files = []
+            toc_items = []
 
-        # Create intro page
-        intro_file = "intro.xhtml"
-        with open(epub_dir / intro_file, "w", encoding="utf-8") as f:
-            f.write(
-                f"""<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head>
-    <title>Introduction</title>
-    <link rel="stylesheet" type="text/css" href="style.css" />
-</head>
-<body>
-    <h1>{title}</h1>
-    <p>This EPUB was generated from project directory: {input_dir}</p>
-    <p>Contains {len(project.files)} files.</p>
-</body>
-</html>"""
-            )
-        html_files.append({"id": "intro", "file": intro_file, "title": "Introduction"})
-        toc_items.append({"id": "intro", "title": "Introduction", "href": intro_file})
+            # Create a dedicated TOC page as the first page
+            toc_page_file = "toc_page.xhtml"
 
-        # Process files
-        for i, file_entry in enumerate(project.files):
-            try:
-                # Read file content
-                content = project.get_file_content(file_entry)
-                if content is None:
-                    logger.warning(
-                        f"Skipping file due to read error: {file_entry.relative_path}"
-                    )
-                    error_files += 1
-                    continue
-
-                # Create HTML content based on file type
-                if file_entry.language == "markdown":
-                    # Process markdown files
-                    html_content = render_markdown(content)
-                else:
-                    # Process code files with syntax highlighting
-                    try:
-                        lexer = lexers.get_lexer_for_filename(
-                            str(file_entry.absolute_path)
+            # Process files first
+            for i, file_entry in enumerate(project.files):
+                try:
+                    # Read file content
+                    content = project.get_file_content(file_entry)
+                    if content is None:
+                        logger.warning(
+                            f"Skipping file due to read error: {file_entry.relative_path}"
                         )
-                    except pygments.util.ClassNotFound:
-                        # Fallback to text
-                        lexer = lexers.get_lexer_by_name("text")
+                        error_files += 1
+                        progress.update(1)  # Update progress bar even for skipped files
+                        continue
 
-                    # Apply syntax highlighting
-                    html_content = highlight_code(content, lexer, formatter)
+                    # Create HTML content based on file type
+                    if file_entry.language == "markdown":
+                        # Process markdown files
+                        html_content = render_markdown(content)
+                    else:
+                        # Process code files with syntax highlighting
+                        try:
+                            lexer = lexers.get_lexer_for_filename(
+                                str(file_entry.absolute_path)
+                            )
+                        except pygments.util.ClassNotFound:
+                            # Fallback to text
+                            lexer = lexers.get_lexer_by_name("text")
 
-                # Create HTML file
-                file_id = f"file_{i}"
-                file_name = f"{file_id}.xhtml"
+                        # Apply syntax highlighting
+                        html_content = highlight_code(content, lexer, formatter)
 
-                with open(epub_dir / file_name, "w", encoding="utf-8") as f:
-                    f.write(
-                        f"""<?xml version="1.0" encoding="utf-8"?>
+                    # Create HTML file
+                    file_id = f"file_{i}"
+                    file_name = f"{file_id}.xhtml"
+
+                    with open(epub_dir / file_name, "w", encoding="utf-8") as f:
+                        f.write(
+                            f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
@@ -791,74 +796,150 @@ def convert_project_to_epub(
     {html_content}
 </body>
 </html>"""
+                        )
+
+                    html_files.append(
+                        {
+                            "id": file_id,
+                            "file": file_name,
+                            "title": str(file_entry.relative_path),
+                        }
+                    )
+                    toc_items.append(
+                        {
+                            "id": file_id,
+                            "title": str(file_entry.relative_path),
+                            "href": file_name,
+                            "path": str(file_entry.relative_path),
+                        }
                     )
 
-                html_files.append(
-                    {
-                        "id": file_id,
-                        "file": file_name,
-                        "title": str(file_entry.relative_path),
-                    }
-                )
+                    processed_files += 1
+                    logger.debug(f"Processed file: {file_entry.relative_path}")
 
-                toc_items.append(
-                    {
-                        "id": file_id,
-                        "title": str(file_entry.relative_path),
-                        "href": file_name,
-                    }
-                )
+                    # Update progress bar
+                    progress.update(1)
 
-                processed_files += 1
-                logger.debug(f"Processed file: {file_entry.relative_path}")
+                except Exception as e:
+                    logger.error(
+                        f"Error processing file {file_entry.relative_path}: {e}"
+                    )
+                    error_files += 1
+                    # Update progress bar even for error files
+                    progress.update(1)
+                    continue
 
-            except Exception as e:
-                logger.error(f"Error processing file {file_entry.relative_path}: {e}")
-                error_files += 1
-                continue
+            # Organize TOC items hierarchically based on directory structure
+            hierarchical_toc_items = organize_toc_items_by_directory(toc_items)
 
-        # Organize TOC items hierarchically based on directory structure
-        hierarchical_toc_items = organize_toc_items_by_directory(toc_items)
+            # Function to generate TOC HTML content recursively
+            def generate_toc_html(items, level=0):
+                indent = "    " * level
+                html = []
 
-        # Create EPUB 3 navigation document (nav.xhtml)
-        nav_file = "nav.xhtml"
-        nav_content = generate_nav_xhtml(hierarchical_toc_items, title)
-        with open(epub_dir / nav_file, "w", encoding="utf-8") as f:
-            f.write(nav_content)
+                for item in items:
+                    # If it's a directory with children
+                    if (
+                        item.get("is_directory", False)
+                        and "children" in item
+                        and item["children"]
+                    ):
+                        html.append(
+                            f"{indent}<li><span class='toc-directory'>{item['title']}</span>"
+                        )
+                        html.append(f"{indent}    <ul>")
+                        html.append(generate_toc_html(item["children"], level + 1))
+                        html.append(f"{indent}    </ul>")
+                        html.append(f"{indent}</li>")
+                    # Regular file item
+                    elif "href" in item:
+                        html.append(
+                            f"{indent}<li><a href=\"{item['href']}\">{item['title']}</a></li>"
+                        )
 
-        # Create NCX file for backwards compatibility with EPUB 2 readers
-        ncx_file = "toc.ncx"
-        ncx_content = generate_toc_ncx(hierarchical_toc_items, title, identifier)
-        with open(epub_dir / ncx_file, "w", encoding="utf-8") as f:
-            f.write(ncx_content)
+                return "\n".join(html)
 
-        # Create content.opf file
-        with open(epub_dir / "content.opf", "w", encoding="utf-8") as f:
-            manifest_items = []
-            spine_items = []
+            # Generate TOC HTML content
+            toc_html_content = f"""<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+    <title>Table of Contents</title>
+    <link rel="stylesheet" type="text/css" href="style.css" />
+    <style>
+        .toc-directory {{
+            font-weight: bold;
+        }}
+        ul {{
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }}
+        li {{
+            margin-bottom: 0.5em;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Table of Contents</h1>
+    <ul class="toc-list">
+{generate_toc_html(hierarchical_toc_items)}
+    </ul>
+</body>
+</html>"""
 
-            # Add CSS
-            manifest_items.append(
-                '<item id="style" href="style.css" media-type="text/css"/>'
+            with open(epub_dir / toc_page_file, "w", encoding="utf-8") as f:
+                f.write(toc_html_content)
+
+            # Add the TOC page to the list of HTML files and TOC items
+            # Insert it as the first page
+            html_files.insert(
+                0,
+                {"id": "toc_page", "file": toc_page_file, "title": "Table of Contents"},
+            )
+            toc_items.insert(
+                0,
+                {"id": "toc_page", "title": "Table of Contents", "href": toc_page_file},
             )
 
-            # Add NCX and NAV files to manifest
-            manifest_items.append(
-                f'<item id="ncx" href="{ncx_file}" media-type="application/x-dtbncx+xml"/>'
-            )
-            manifest_items.append(
-                f'<item id="nav" href="{nav_file}" media-type="application/xhtml+xml" properties="nav"/>'
-            )
+            # Create EPUB 3 navigation document (nav.xhtml)
+            nav_file = "nav.xhtml"
+            nav_content = generate_nav_xhtml(hierarchical_toc_items, title)
+            with open(epub_dir / nav_file, "w", encoding="utf-8") as f:
+                f.write(nav_content)
 
-            # Add HTML files
-            for html_file in html_files:
+            # Create NCX file for backwards compatibility with EPUB 2 readers
+            ncx_file = "toc.ncx"
+            ncx_content = generate_toc_ncx(hierarchical_toc_items, title, identifier)
+            with open(epub_dir / ncx_file, "w", encoding="utf-8") as f:
+                f.write(ncx_content)
+
+            # Create content.opf file
+            with open(epub_dir / "content.opf", "w", encoding="utf-8") as f:
+                manifest_items = []
+                spine_items = []
+
+                # Add CSS
                 manifest_items.append(
-                    f'<item id="{html_file["id"]}" href="{html_file["file"]}" '
-                    f'media-type="application/xhtml+xml"/>'
+                    '<item id="style" href="style.css" media-type="text/css"/>'
                 )
-                spine_items.append(f'<itemref idref="{html_file["id"]}"/>')
 
-            opf_content = f"""<?xml version="1.0" encoding="utf-8"?>
+                # Add NCX and NAV files to manifest
+                manifest_items.append(
+                    f'<item id="ncx" href="{ncx_file}" media-type="application/x-dtbncx+xml"/>'
+                )
+                manifest_items.append(
+                    f'<item id="nav" href="{nav_file}" media-type="application/xhtml+xml" properties="nav"/>'
+                )
+
+                # Add HTML files
+                for html_file in html_files:
+                    manifest_items.append(
+                        f'<item id="{html_file["id"]}" href="{html_file["file"]}" '
+                        f'media-type="application/xhtml+xml"/>'
+                    )
+                    spine_items.append(f'<itemref idref="{html_file["id"]}"/>')
+
+                opf_content = f"""<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:identifier id="uid">{identifier}</dc:identifier>
@@ -875,35 +956,37 @@ def convert_project_to_epub(
     </spine>
 </package>"""
 
-            f.write(opf_content)
+                f.write(opf_content)
 
-        # Create the EPUB (ZIP) file
-        try:
-            if output_path.exists():
-                output_path.unlink()
+            # Create the EPUB (ZIP) file
+            try:
+                if output_path.exists():
+                    output_path.unlink()
 
-            with zipfile.ZipFile(output_path, "w") as epub_zip:
-                # Add mimetype first (must be uncompressed)
-                epub_zip.write(
-                    temp_path / "mimetype", "mimetype", compress_type=zipfile.ZIP_STORED
-                )
+                with zipfile.ZipFile(output_path, "w") as epub_zip:
+                    # Add mimetype first (must be uncompressed)
+                    epub_zip.write(
+                        temp_path / "mimetype",
+                        "mimetype",
+                        compress_type=zipfile.ZIP_STORED,
+                    )
 
-                # Add all other files (compressed)
-                for root, dirs, files in os.walk(temp_path):
-                    for file in files:
-                        if file == "mimetype":
-                            continue  # Already added
+                    # Add all other files (compressed)
+                    for root, dirs, files in os.walk(temp_path):
+                        for file in files:
+                            if file == "mimetype":
+                                continue  # Already added
 
-                        file_path = Path(root) / file
-                        arc_name = str(file_path.relative_to(temp_path))
-                        epub_zip.write(
-                            file_path, arc_name, compress_type=zipfile.ZIP_DEFLATED
-                        )
+                            file_path = Path(root) / file
+                            arc_name = str(file_path.relative_to(temp_path))
+                            epub_zip.write(
+                                file_path, arc_name, compress_type=zipfile.ZIP_DEFLATED
+                            )
 
-            logger.info(f"EPUB created successfully at {output_path}")
-        except Exception as e:
-            logger.error(f"Error creating EPUB file: {e}")
-            raise
+                logger.info(f"EPUB created successfully at {output_path}")
+            except Exception as e:
+                logger.error(f"Error creating EPUB file: {e}")
+                raise
 
     # Generate summary message
     summary = (
