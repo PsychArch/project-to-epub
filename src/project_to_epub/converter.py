@@ -385,25 +385,27 @@ def get_css_for_epub() -> str:
 def flatten_toc_items(toc_items: List[Dict[str, str]]) -> List[Dict]:
     """
     Flatten TOC items while preserving hierarchical naming.
-    
+
     This creates a flat (non-nested) TOC structure but keeps the directory names
     as part of the file names in the TOC entries.
-    
+
     Args:
         toc_items: List of dictionaries with hierarchical TOC structure
-        
+
     Returns:
         List[Dict]: Flattened TOC items
     """
     # Start with non-file items (like TOC page)
     result = [item for item in toc_items if not item.get("is_directory", False)]
-    
+
     # Recursive function to flatten the hierarchy
     def process_items(items, parent_path=""):
         for item in items:
             if item.get("is_directory", False) and "children" in item:
                 # For directories, process their children
-                current_path = f"{parent_path}/{item['title']}" if parent_path else item['title']
+                current_path = (
+                    f"{parent_path}/{item['title']}" if parent_path else item["title"]
+                )
                 process_items(item["children"], current_path)
             elif "href" in item and not item.get("is_directory", False):
                 # For files, add them to the result with the parent path in the title
@@ -415,12 +417,12 @@ def flatten_toc_items(toc_items: List[Dict[str, str]]) -> List[Dict]:
                     result.append(flat_item)
                 else:
                     result.append(item)
-    
+
     # Process all hierarchical items
     for item in toc_items:
         if item.get("is_directory", False) and "children" in item:
             process_items([item])
-    
+
     return result
 
 
@@ -873,7 +875,7 @@ def convert_project_to_epub(
 
             # Organize TOC items hierarchically based on directory structure
             hierarchical_toc_items = organize_toc_items_by_directory(toc_items)
-            
+
             # If flat TOC is enabled, flatten the hierarchical TOC
             use_flat_toc = config.get("flat_toc", True)  # Default to True
             if use_flat_toc:
