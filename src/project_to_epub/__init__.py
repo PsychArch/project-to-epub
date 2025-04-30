@@ -2,4 +2,4 @@
 Project-to-EPUB: Convert a software project directory into an EPUB file for offline code reading.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
