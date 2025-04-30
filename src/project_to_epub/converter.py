@@ -382,6 +382,48 @@ def get_css_for_epub() -> str:
     """
 
 
+def flatten_toc_items(toc_items: List[Dict[str, str]]) -> List[Dict]:
+    """
+    Flatten TOC items while preserving hierarchical naming.
+    
+    This creates a flat (non-nested) TOC structure but keeps the directory names
+    as part of the file names in the TOC entries.
+    
+    Args:
+        toc_items: List of dictionaries with hierarchical TOC structure
+        
+    Returns:
+        List[Dict]: Flattened TOC items
+    """
+    # Start with non-file items (like TOC page)
+    result = [item for item in toc_items if not item.get("is_directory", False)]
+    
+    # Recursive function to flatten the hierarchy
+    def process_items(items, parent_path=""):
+        for item in items:
+            if item.get("is_directory", False) and "children" in item:
+                # For directories, process their children
+                current_path = f"{parent_path}/{item['title']}" if parent_path else item['title']
+                process_items(item["children"], current_path)
+            elif "href" in item and not item.get("is_directory", False):
+                # For files, add them to the result with the parent path in the title
+                # Only modify the title if it's not already a path (like TOC page)
+                if parent_path and "/" not in item["title"]:
+                    # Create a copy of the item to avoid modifying the original
+                    flat_item = item.copy()
+                    flat_item["title"] = f"{parent_path}/{item['title']}"
+                    result.append(flat_item)
+                else:
+                    result.append(item)
+    
+    # Process all hierarchical items
+    for item in toc_items:
+        if item.get("is_directory", False) and "children" in item:
+            process_items([item])
+    
+    return result
+
+
 def highlight_code(content: str, lexer, formatter: HtmlFormatter) -> str:
     """
     Apply syntax highlighting to code content.
@@ -831,6 +873,13 @@ def convert_project_to_epub(
 
             # Organize TOC items hierarchically based on directory structure
             hierarchical_toc_items = organize_toc_items_by_directory(toc_items)
+            
+            # If flat TOC is enabled, flatten the hierarchical TOC
+            use_flat_toc = config.get("flat_toc", True)  # Default to True
+            if use_flat_toc:
+                toc_items_for_display = flatten_toc_items(hierarchical_toc_items)
+            else:
+                toc_items_for_display = hierarchical_toc_items
 
             # Function to generate TOC HTML content recursively
             def generate_toc_html(items, level=0):
@@ -854,7 +903,7 @@ def convert_project_to_epub(
                     # Regular file item
                     elif "href" in item:
                         html.append(
-                            f"{indent}<li><a href=\"{item['href']}\">{item['title']}</a></li>"
+                            f'{indent}<li><a href="{item["href"]}">{item["title"]}</a></li>'
                         )
 
                 return "\n".join(html)
@@ -882,7 +931,7 @@ def convert_project_to_epub(
 <body>
     <h1>Table of Contents</h1>
     <ul class="toc-list">
-{generate_toc_html(hierarchical_toc_items)}
+{generate_toc_html(toc_items_for_display)}
     </ul>
 </body>
 </html>"""
@@ -903,13 +952,13 @@ def convert_project_to_epub(
 
             # Create EPUB 3 navigation document (nav.xhtml)
             nav_file = "nav.xhtml"
-            nav_content = generate_nav_xhtml(hierarchical_toc_items, title)
+            nav_content = generate_nav_xhtml(toc_items_for_display, title)
             with open(epub_dir / nav_file, "w", encoding="utf-8") as f:
                 f.write(nav_content)
 
             # Create NCX file for backwards compatibility with EPUB 2 readers
             ncx_file = "toc.ncx"
-            ncx_content = generate_toc_ncx(hierarchical_toc_items, title, identifier)
+            ncx_content = generate_toc_ncx(toc_items_for_display, title, identifier)
             with open(epub_dir / ncx_file, "w", encoding="utf-8") as f:
                 f.write(ncx_content)
 

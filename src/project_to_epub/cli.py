@@ -65,6 +65,9 @@ def main(
     no_skip_large: Annotated[
         bool, typer.Option(help="Error out on large files instead of skipping")
     ] = False,
+    hierarchical_toc: Annotated[
+        bool, typer.Option(help="Use hierarchical TOC instead of flat TOC")
+    ] = False,
     version: Annotated[
         bool,
         typer.Option(
@@ -124,6 +127,7 @@ def main(
         "author": author,
         "large_file_threshold_mb": limit_mb,
         "skip_large_files": not no_skip_large,
+        "flat_toc": not hierarchical_toc,  # Invert the flag for user-friendliness
     }
 
     for key, value in cli_overrides.items():
