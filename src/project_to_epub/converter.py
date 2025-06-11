@@ -103,6 +103,12 @@ class Project:
 
             # Filter dirs based on gitignore (modify dirs in-place to skip walking ignored dirs)
             dirs[:] = [d for d in dirs if not self.is_ignored(root_path / d)]
+            
+            # Sort directories alphabetically
+            dirs.sort()
+            
+            # Sort files alphabetically
+            files.sort()
 
             # Process files
             for file in files:
