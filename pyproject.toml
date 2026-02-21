@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-to-epub"
-version = "0.1.4"
+version = "0.1.5"
 description = "Convert a software project directory into an EPUB file for offline code reading"
 readme = "README.md"
 authors = [
@@ -30,6 +30,7 @@ classifiers = [
 requires-python = ">=3.8.1"
 dependencies = [
     "typer>=0.9.0",
+    "typing-extensions>=4.0.0",
     "pygments>=2.15.0",
     "pathspec>=0.11.0",
     "pyyaml>=6.0",
