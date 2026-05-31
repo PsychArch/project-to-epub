@@ -101,12 +101,12 @@ class Project:
             if ".git" in dirs:
                 dirs.remove(".git")
 
-            # Filter dirs based on gitignore (modify dirs in-place to skip walking ignored dirs)
+            # Filter dirs in-place to avoid walking ignored directories.
             dirs[:] = [d for d in dirs if not self.is_ignored(root_path / d)]
-            
+
             # Sort directories alphabetically
             dirs.sort()
-            
+
             # Sort files alphabetically
             files.sort()
 
@@ -136,14 +136,17 @@ class Project:
                     try:
                         file_size = file_path.stat().st_size
                         if file_size > large_file_threshold:
+                            size_mb = file_size / 1024 / 1024
                             if self.config.get("skip_large_files", True):
                                 logger.warning(
-                                    f"Skipping large file ({file_size / 1024 / 1024:.2f} MB): {file_path}"
+                                    "Skipping large file "
+                                    f"({size_mb:.2f} MB): {file_path}"
                                 )
                                 continue
                             else:
                                 logger.warning(
-                                    f"Including large file ({file_size / 1024 / 1024:.2f} MB): {file_path}"
+                                    "Including large file "
+                                    f"({size_mb:.2f} MB): {file_path}"
                                 )
                     except Exception as e:
                         logger.warning(f"Error checking file size for {file_path}: {e}")
@@ -562,7 +565,8 @@ def organize_toc_items_by_directory(toc_items: List[Dict[str, str]]) -> List[Dic
 
 def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
     """
-    Generate the NCX file content for EPUB Table of Contents with hierarchical structure.
+    Generate the NCX file content for EPUB Table of Contents with
+    hierarchical structure.
 
     Args:
         toc_items: List of dictionaries with hierarchical TOC structure
@@ -572,8 +576,7 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
     Returns:
         str: NCX file content
     """
-    ncx_content = [
-        f"""<?xml version="1.0" encoding="utf-8"?>
+    ncx_content = [f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
     <head>
@@ -585,8 +588,7 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
     <docTitle>
         <text>{title}</text>
     </docTitle>
-    <navMap>"""
-    ]
+    <navMap>"""]
 
     play_order = 1
 
@@ -609,7 +611,11 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
                         first_child_href = child["href"]
                         break
 
-            nav_content = f"""{indent}<navPoint id="{item['id']}" playOrder="{current_play_order}">
+            nav_point_open = (
+                f'{indent}<navPoint id="{item["id"]}" '
+                f'playOrder="{current_play_order}">'
+            )
+            nav_content = f"""{nav_point_open}
 {indent}    <navLabel>
 {indent}        <text>{item['title']}</text>
 {indent}    </navLabel>
@@ -625,7 +631,11 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
         else:
             # For regular file items
             if "href" in item:
-                nav_content = f"""{indent}<navPoint id="{item['id']}" playOrder="{current_play_order}">
+                nav_point_open = (
+                    f'{indent}<navPoint id="{item["id"]}" '
+                    f'playOrder="{current_play_order}">'
+                )
+                nav_content = f"""{nav_point_open}
 {indent}    <navLabel>
 {indent}        <text>{item['title']}</text>
 {indent}    </navLabel>
@@ -637,10 +647,8 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
     for item in toc_items:
         add_nav_point(item)
 
-    ncx_content.append(
-        """    </navMap>
-</ncx>"""
-    )
+    ncx_content.append("""    </navMap>
+</ncx>""")
 
     return "\n".join(ncx_content)
 
@@ -656,8 +664,7 @@ def generate_nav_xhtml(toc_items: List[Dict], title: str) -> str:
     Returns:
         str: nav.xhtml content
     """
-    nav_content = [
-        """<?xml version="1.0" encoding="utf-8"?>
+    nav_content = ["""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
@@ -667,8 +674,7 @@ def generate_nav_xhtml(toc_items: List[Dict], title: str) -> str:
 <body>
     <nav epub:type="toc" id="toc">
         <h1 class="toc-title">Table of Contents</h1>
-        <ol class="toc-list">"""
-    ]
+        <ol class="toc-list">"""]
 
     # Recursive function to build nested lists
     def add_toc_items(items, level=0):
@@ -697,12 +703,10 @@ def generate_nav_xhtml(toc_items: List[Dict], title: str) -> str:
     # Process all items
     add_toc_items(toc_items)
 
-    nav_content.append(
-        """        </ol>
+    nav_content.append("""        </ol>
     </nav>
 </body>
-</html>"""
-    )
+</html>""")
 
     return "\n".join(nav_content)
 
@@ -777,14 +781,13 @@ def convert_project_to_epub(
 
             # Add container.xml
             with open(meta_inf_dir / "container.xml", "w", encoding="utf-8") as f:
-                f.write(
-                    """<?xml version="1.0" encoding="UTF-8"?>
+                f.write("""<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
     <rootfiles>
-        <rootfile full-path="EPUB/content.opf" media-type="application/oebps-package+xml"/>
+        <rootfile full-path="EPUB/content.opf"
+            media-type="application/oebps-package+xml"/>
     </rootfiles>
-</container>"""
-                )
+</container>""")
 
             # Add CSS file
             css_content = get_css_for_epub()
@@ -804,9 +807,11 @@ def convert_project_to_epub(
                     # Read file content
                     content = project.get_file_content(file_entry)
                     if content is None:
-                        logger.warning(
-                            f"Skipping file due to read error: {file_entry.relative_path}"
+                        read_error_message = (
+                            "Skipping file due to read error: "
+                            f"{file_entry.relative_path}"
                         )
+                        logger.warning(read_error_message)
                         error_files += 1
                         progress.update(1)  # Update progress bar even for skipped files
                         continue
@@ -833,8 +838,7 @@ def convert_project_to_epub(
                     file_name = f"{file_id}.xhtml"
 
                     with open(epub_dir / file_name, "w", encoding="utf-8") as f:
-                        f.write(
-                            f"""<?xml version="1.0" encoding="utf-8"?>
+                        f.write(f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
@@ -845,8 +849,7 @@ def convert_project_to_epub(
     <h1>{file_entry.relative_path}</h1>
     {html_content}
 </body>
-</html>"""
-                        )
+</html>""")
 
                     html_files.append(
                         {
@@ -902,7 +905,8 @@ def convert_project_to_epub(
                         and item["children"]
                     ):
                         html.append(
-                            f"{indent}<li><span class='toc-directory'>{item['title']}</span>"
+                            f"{indent}<li><span class='toc-directory'>"
+                            f"{item['title']}</span>"
                         )
                         html.append(f"{indent}    <ul>")
                         html.append(generate_toc_html(item["children"], level + 1))
@@ -911,7 +915,8 @@ def convert_project_to_epub(
                     # Regular file item
                     elif "href" in item:
                         html.append(
-                            f'{indent}<li><a href="{item["href"]}">{item["title"]}</a></li>'
+                            f'{indent}<li><a href="{item["href"]}">'
+                            f'{item["title"]}</a></li>'
                         )
 
                 return "\n".join(html)
@@ -982,10 +987,12 @@ def convert_project_to_epub(
 
                 # Add NCX and NAV files to manifest
                 manifest_items.append(
-                    f'<item id="ncx" href="{ncx_file}" media-type="application/x-dtbncx+xml"/>'
+                    f'<item id="ncx" href="{ncx_file}" '
+                    'media-type="application/x-dtbncx+xml"/>'
                 )
                 manifest_items.append(
-                    f'<item id="nav" href="{nav_file}" media-type="application/xhtml+xml" properties="nav"/>'
+                    f'<item id="nav" href="{nav_file}" '
+                    'media-type="application/xhtml+xml" properties="nav"/>'
                 )
 
                 # Add HTML files

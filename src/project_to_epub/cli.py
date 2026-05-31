@@ -3,7 +3,6 @@ Command-line interface for project-to-epub.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -28,7 +27,10 @@ DEFAULT_CONFIG = {
 }
 
 app = typer.Typer(
-    help="Convert a software project directory into an EPUB file for offline code reading."
+    help=(
+        "Convert a software project directory into an EPUB file for offline "
+        "code reading."
+    )
 )
 
 
@@ -78,8 +80,9 @@ def main(
     """
     Convert a software project directory into an EPUB file for offline code reading.
 
-    This tool creates an EPUB that preserves your project structure in the table of contents,
-    applies syntax highlighting to code files, and respects .gitignore rules.
+    This tool creates an EPUB that preserves your project structure in the
+    table of contents, applies syntax highlighting to code files, and respects
+    .gitignore rules.
     """
     # Setup logging
     numeric_level = getattr(logging, log_level.upper(), None)
@@ -100,8 +103,12 @@ def main(
 
     # Validate input directory
     if not input_directory.exists() or not input_directory.is_dir():
+        error_message = (
+            f"Error: Input directory '{input_directory}' does not exist or "
+            "is not a directory"
+        )
         typer.echo(
-            f"Error: Input directory '{input_directory}' does not exist or is not a directory",
+            error_message,
             err=True,
         )
         raise typer.Exit(code=1)
