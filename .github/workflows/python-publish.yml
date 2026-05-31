@@ -50,4 +50,4 @@ jobs:
         twine check dist/*
     - name: Publish to PyPI
       if: github.event_name == 'release'
-      uses: pypa/gh-action-pypi-publish@v1.9.0
+      uses: pypa/gh-action-pypi-publish@v1.14.0
