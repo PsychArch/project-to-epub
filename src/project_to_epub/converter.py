@@ -7,6 +7,8 @@ import os
 import tempfile
 import uuid
 import zipfile
+from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -56,9 +58,7 @@ class Project:
 
         # TODO: Add support for scanning nested .gitignore files
 
-        return pathspec.PathSpec.from_lines(
-            pathspec.patterns.GitWildMatchPattern, patterns
-        )
+        return pathspec.GitIgnoreSpec.from_lines(patterns)
 
     def is_ignored(self, path: Path) -> bool:
         """
@@ -454,12 +454,12 @@ def highlight_code(content: str, lexer, formatter: HtmlFormatter) -> str:
                 f"Pygments returned empty highlighted content for {lexer.name}"
             )
             # Provide a fallback if highlighting fails
-            highlighted = f"<pre class='highlight'>{content}</pre>"
+            highlighted = f'<pre class="highlight">{escape(content)}</pre>'
         return highlighted
     except Exception as e:
         logger.error(f"Error highlighting code with {lexer.name}: {e}")
         # Provide a fallback on exception
-        return f"<pre class='highlight'>{content}</pre>"
+        return f'<pre class="highlight">{escape(content)}</pre>'
 
 
 def render_markdown(content: str) -> str:
@@ -477,13 +477,28 @@ def render_markdown(content: str) -> str:
         html = markdown.markdown(
             content,
             extensions=["tables", "fenced_code", "codehilite"],
-            output_format="html",
+            output_format="xhtml",
         )
         return f"<div class='markdown-content'>{html}</div>"
     except Exception as e:
         logger.error(f"Error rendering Markdown: {e}")
         # Provide a fallback on exception
-        return f"<pre class='markdown-error'>{content}</pre>"
+        return f'<pre class="markdown-error">{escape(content)}</pre>'
+
+
+def epub_timestamp() -> str:
+    """Return the current UTC timestamp in EPUB metadata format."""
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def xml_escape(value: object) -> str:
+    """Escape text or attribute values for generated EPUB XML documents."""
+    return escape(str(value), quote=True)
 
 
 def organize_toc_items_by_directory(toc_items: List[Dict[str, str]]) -> List[Dict]:
@@ -580,13 +595,13 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
 <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
     <head>
-        <meta name="dtb:uid" content="{identifier}"/>
+        <meta name="dtb:uid" content="{xml_escape(identifier)}"/>
         <meta name="dtb:depth" content="3"/>
         <meta name="dtb:totalPageCount" content="0"/>
         <meta name="dtb:maxPageNumber" content="0"/>
     </head>
     <docTitle>
-        <text>{title}</text>
+        <text>{xml_escape(title)}</text>
     </docTitle>
     <navMap>"""]
 
@@ -617,9 +632,9 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
             )
             nav_content = f"""{nav_point_open}
 {indent}    <navLabel>
-{indent}        <text>{item['title']}</text>
+{indent}        <text>{xml_escape(item['title'])}</text>
 {indent}    </navLabel>
-{indent}    <content src="{first_child_href}"/>
+{indent}    <content src="{xml_escape(first_child_href)}"/>
 """
             ncx_content.append(nav_content)
 
@@ -637,9 +652,9 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
                 )
                 nav_content = f"""{nav_point_open}
 {indent}    <navLabel>
-{indent}        <text>{item['title']}</text>
+{indent}        <text>{xml_escape(item['title'])}</text>
 {indent}    </navLabel>
-{indent}    <content src="{item['href']}"/>
+{indent}    <content src="{xml_escape(item['href'])}"/>
 {indent}</navPoint>"""
                 ncx_content.append(nav_content)
 
@@ -688,7 +703,8 @@ def generate_nav_xhtml(toc_items: List[Dict], title: str) -> str:
                 and item["children"]
             ):
                 nav_content.append(
-                    f"{indent}<li><span class='toc-directory'>{item['title']}</span>"
+                    f"{indent}<li><span class='toc-directory'>"
+                    f"{xml_escape(item['title'])}</span>"
                 )
                 nav_content.append(f"{indent}    <ol>")
                 add_toc_items(item["children"], level + 1)
@@ -697,7 +713,8 @@ def generate_nav_xhtml(toc_items: List[Dict], title: str) -> str:
             # Regular file item
             elif "href" in item:
                 nav_content.append(
-                    f'{indent}<li><a href="{item["href"]}">{item["title"]}</a></li>'
+                    f'{indent}<li><a href="{xml_escape(item["href"])}">'
+                    f'{xml_escape(item["title"])}</a></li>'
                 )
 
     # Process all items
@@ -757,6 +774,7 @@ def convert_project_to_epub(
             config.get("author") or metadata.get("author") or "Project-to-EPUB Tool"
         )
         language = metadata.get("language", "en")
+        publisher = metadata.get("publisher")
 
         # Generate a unique identifier for the EPUB
         identifier = f"urn:uuid:{uuid.uuid4()}"
@@ -837,16 +855,17 @@ def convert_project_to_epub(
                     file_id = f"file_{i}"
                     file_name = f"{file_id}.xhtml"
 
+                    escaped_relative_path = xml_escape(file_entry.relative_path)
                     with open(epub_dir / file_name, "w", encoding="utf-8") as f:
                         f.write(f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
-    <title>{file_entry.relative_path}</title>
+    <title>{escaped_relative_path}</title>
     <link rel="stylesheet" type="text/css" href="style.css" />
 </head>
 <body>
-    <h1>{file_entry.relative_path}</h1>
+    <h1>{escaped_relative_path}</h1>
     {html_content}
 </body>
 </html>""")
@@ -906,7 +925,7 @@ def convert_project_to_epub(
                     ):
                         html.append(
                             f"{indent}<li><span class='toc-directory'>"
-                            f"{item['title']}</span>"
+                            f"{xml_escape(item['title'])}</span>"
                         )
                         html.append(f"{indent}    <ul>")
                         html.append(generate_toc_html(item["children"], level + 1))
@@ -915,8 +934,8 @@ def convert_project_to_epub(
                     # Regular file item
                     elif "href" in item:
                         html.append(
-                            f'{indent}<li><a href="{item["href"]}">'
-                            f'{item["title"]}</a></li>'
+                            f'{indent}<li><a href="{xml_escape(item["href"])}">'
+                            f'{xml_escape(item["title"])}</a></li>'
                         )
 
                 return "\n".join(html)
@@ -998,19 +1017,29 @@ def convert_project_to_epub(
                 # Add HTML files
                 for html_file in html_files:
                     manifest_items.append(
-                        f'<item id="{html_file["id"]}" href="{html_file["file"]}" '
+                        f'<item id="{xml_escape(html_file["id"])}" '
+                        f'href="{xml_escape(html_file["file"])}" '
                         f'media-type="application/xhtml+xml"/>'
                     )
-                    spine_items.append(f'<itemref idref="{html_file["id"]}"/>')
+                    spine_items.append(
+                        f'<itemref idref="{xml_escape(html_file["id"])}"/>'
+                    )
+
+                publisher_metadata = ""
+                if publisher:
+                    publisher_metadata = (
+                        "\n        <dc:publisher>"
+                        f"{xml_escape(publisher)}</dc:publisher>"
+                    )
 
                 opf_content = f"""<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:identifier id="uid">{identifier}</dc:identifier>
-        <dc:title>{title}</dc:title>
-        <dc:creator>{author}</dc:creator>
-        <dc:language>{language}</dc:language>
-        <meta property="dcterms:modified">{os.urandom(4).hex()}</meta>
+        <dc:identifier id="uid">{xml_escape(identifier)}</dc:identifier>
+        <dc:title>{xml_escape(title)}</dc:title>
+        <dc:creator>{xml_escape(author)}</dc:creator>
+        <dc:language>{xml_escape(language)}</dc:language>{publisher_metadata}
+        <meta property="dcterms:modified">{epub_timestamp()}</meta>
     </metadata>
     <manifest>
         {chr(10).join(manifest_items)}

@@ -65,7 +65,7 @@ def main(
         Optional[float], typer.Option(help="Set large file threshold in MB")
     ] = None,
     no_skip_large: Annotated[
-        bool, typer.Option(help="Error out on large files instead of skipping")
+        bool, typer.Option(help="Include large files instead of skipping")
     ] = False,
     hierarchical_toc: Annotated[
         bool, typer.Option(help="Use hierarchical TOC instead of flat TOC")

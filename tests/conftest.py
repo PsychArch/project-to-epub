@@ -30,21 +30,18 @@ def sample_project_dir():
 
         # Create a main.py file
         with open(src_dir / "main.py", "w") as f:
-            f.write(
-                """
+            f.write("""
 def main():
     \"\"\"Main entry point.\"\"\"
     print("Hello, world!")
 
 if __name__ == "__main__":
     main()
-"""
-            )
+""")
 
         # Create a utils.py file
         with open(src_dir / "utils.py", "w") as f:
-            f.write(
-                """
+            f.write("""
 def greet(name):
     \"\"\"Greet a user.\"\"\"
     return f"Hello, {name}!"
@@ -52,8 +49,7 @@ def greet(name):
 def calculate_sum(a, b):
     \"\"\"Calculate the sum of two numbers.\"\"\"
     return a + b
-"""
-            )
+""")
 
         # Create a tests directory
         tests_dir = project_dir / "tests"
@@ -61,8 +57,7 @@ def calculate_sum(a, b):
 
         # Create a test file
         with open(tests_dir / "test_utils.py", "w") as f:
-            f.write(
-                """
+            f.write("""
 import pytest
 from src.utils import greet, calculate_sum
 
@@ -74,8 +69,7 @@ def test_calculate_sum():
     \"\"\"Test the calculate_sum function.\"\"\"
     assert calculate_sum(1, 2) == 3
     assert calculate_sum(-1, 1) == 0
-"""
-            )
+""")
 
         # Create a docs directory with a markdown file
         docs_dir = project_dir / "docs"
@@ -83,8 +77,7 @@ def test_calculate_sum():
 
         # Create a README.md file
         with open(project_dir / "README.md", "w") as f:
-            f.write(
-                """
+            f.write("""
 # Sample Project
 
 This is a sample project for testing the project-to-epub converter.
@@ -94,8 +87,7 @@ This is a sample project for testing the project-to-epub converter.
 - Sample Python code
 - Tests
 - Documentation
-"""
-            )
+""")
 
         # Create a log file that should be ignored
         with open(project_dir / "app.log", "w") as f:

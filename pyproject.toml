@@ -4,18 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-to-epub"
-version = "0.1.6"
+version = "0.2.0"
 description = "Convert a software project directory into an EPUB file for offline code reading"
 readme = "README.md"
 authors = [
     {name = "Project-to-EPUB Team"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -80,4 +79,4 @@ select = [
     "F",  # pyflakes
     "I",  # isort
     "W",  # pycodestyle warnings
-] 
+]

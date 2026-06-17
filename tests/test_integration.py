@@ -3,12 +3,36 @@ Integration tests for the project-to-epub converter.
 """
 
 import os
+import re
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 
 from ebooklib import epub
 
 from project_to_epub.converter import convert_project_to_epub
+
+EPUB_XML_SUFFIXES = (".opf", ".xhtml", ".ncx", ".xml")
+
+
+def parse_epub_xml_documents(epub_path):
+    """Parse all XML-based files in an EPUB and return parsed roots by path."""
+    parsed = {}
+    with zipfile.ZipFile(epub_path, "r") as zip_ref:
+        for name in zip_ref.namelist():
+            if name.endswith(EPUB_XML_SUFFIXES):
+                parsed[name] = ET.fromstring(zip_ref.read(name))
+    return parsed
+
+
+def assert_epub_mimetype_is_first_and_uncompressed(epub_path):
+    """Validate the required EPUB mimetype ZIP entry constraints."""
+    with zipfile.ZipFile(epub_path, "r") as zip_ref:
+        first_entry = zip_ref.infolist()[0]
+        assert first_entry.filename == "mimetype"
+        assert first_entry.compress_type == zipfile.ZIP_STORED
+        assert first_entry.extra == b""
+        assert zip_ref.read("mimetype") == b"application/epub+zip"
 
 
 def test_convert_sample_project(sample_project_dir, temp_output_file):
@@ -40,6 +64,17 @@ def test_convert_sample_project(sample_project_dir, temp_output_file):
 
     # Check that the file is a valid EPUB (zip archive)
     assert zipfile.is_zipfile(temp_output_file)
+    assert_epub_mimetype_is_first_and_uncompressed(temp_output_file)
+    parsed_documents = parse_epub_xml_documents(temp_output_file)
+    assert "EPUB/content.opf" in parsed_documents
+
+    content_opf = parsed_documents["EPUB/content.opf"]
+    opf_namespace = {"opf": "http://www.idpf.org/2007/opf"}
+    modified = content_opf.find(
+        ".//opf:meta[@property='dcterms:modified']", opf_namespace
+    )
+    assert modified is not None
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", modified.text)
 
     # Extract and check contents
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -156,3 +191,51 @@ def test_custom_title_and_author(sample_project_dir, temp_output_file):
     publisher_data = book.get_metadata("DC", "publisher")
     if publisher_data:
         assert publisher_data[0][0] == "Test Publisher"
+
+
+def test_special_characters_generate_parseable_epub(tmp_path):
+    """Special characters in metadata and paths must be escaped in EPUB XML."""
+    project_dir = tmp_path / "A & B <Project>"
+    source_dir = project_dir / "src & docs"
+    source_dir.mkdir(parents=True)
+    (source_dir / "a & b.py").write_text(
+        'print("A & B < C")\n',
+        encoding="utf-8",
+    )
+    (source_dir / "notes & refs.md").write_text(
+        "# Notes & Refs\n\nUse `A < B && C > D` in examples.\n",
+        encoding="utf-8",
+    )
+
+    output_file = tmp_path / "special.epub"
+    convert_project_to_epub(
+        project_dir,
+        output_file,
+        {
+            "default_theme": "default_eink",
+            "large_file_threshold_mb": 10,
+            "skip_large_files": True,
+            "title": 'A & B <Book> "Sample"',
+            "author": 'C "D" & <E>',
+            "epub_metadata": {
+                "language": "en",
+                "publisher": "P & Co <Test>",
+            },
+        },
+    )
+
+    parsed_documents = parse_epub_xml_documents(output_file)
+    assert {
+        "META-INF/container.xml",
+        "EPUB/content.opf",
+        "EPUB/nav.xhtml",
+        "EPUB/toc.ncx",
+        "EPUB/toc_page.xhtml",
+        "EPUB/file_0.xhtml",
+        "EPUB/file_1.xhtml",
+    }.issubset(parsed_documents)
+
+    book = epub.read_epub(str(output_file))
+    assert book.get_metadata("DC", "title")[0][0] == 'A & B <Book> "Sample"'
+    assert book.get_metadata("DC", "creator")[0][0] == 'C "D" & <E>'
+    assert book.get_metadata("DC", "publisher")[0][0] == "P & Co <Test>"
