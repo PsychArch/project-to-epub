@@ -10,6 +10,22 @@ import pytest
 
 
 @pytest.fixture
+def default_config():
+    """Return the default test conversion config."""
+    return {
+        "default_theme": "default_eink",
+        "large_file_threshold_mb": 10,
+        "skip_large_files": True,
+        "log_level": "INFO",
+        "epub_metadata": {
+            "author": "Test Author",
+            "language": "en",
+            "publisher": "Test Publisher",
+        },
+    }
+
+
+@pytest.fixture
 def sample_project_dir():
     """
     Create a temporary directory with a sample project structure.

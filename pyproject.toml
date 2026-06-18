@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-to-epub"
-version = "0.2.0"
+version = "0.2.1"
 description = "Convert a software project directory into an EPUB file for offline code reading"
 readme = "README.md"
 authors = [
     {name = "Project-to-EPUB Team"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -56,6 +56,9 @@ project-to-epub = "project_to_epub.cli:run_cli"
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages = ["project_to_epub"]
+
+[tool.setuptools.package-data]
+project_to_epub = ["style.css"]
 
 [tool.black]
 line-length = 88

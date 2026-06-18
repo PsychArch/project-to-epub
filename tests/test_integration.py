@@ -40,23 +40,14 @@ def assert_epub_mimetype_is_first_and_uncompressed(epub_path):
         assert zip_ref.read("mimetype") == b"application/epub+zip"
 
 
-def test_convert_sample_project(sample_project_dir, temp_output_file):
+def test_convert_sample_project(sample_project_dir, temp_output_file, default_config):
     """Test converting a sample project to EPUB."""
-    # Define config
-    config = {
-        "default_theme": "default_eink",
-        "large_file_threshold_mb": 10,
-        "skip_large_files": True,
-        "log_level": "INFO",
-        "epub_metadata": {
-            "author": "Test Author",
-            "language": "en",
-            "publisher": "Test Publisher",
-        },
-    }
-
     # Convert the project
-    result = convert_project_to_epub(sample_project_dir, temp_output_file, config)
+    result = convert_project_to_epub(
+        sample_project_dir,
+        temp_output_file,
+        default_config,
+    )
 
     # Check that the EPUB file was created
     assert temp_output_file.exists()
@@ -134,20 +125,9 @@ def test_convert_sample_project(sample_project_dir, temp_output_file):
             assert "color: #000000" in css_content
 
 
-def test_ignored_files(sample_project_dir, temp_output_file):
+def test_ignored_files(sample_project_dir, temp_output_file, default_config):
     """Test that ignored files are not included in the EPUB."""
-    # Define config
-    config = {
-        "default_theme": "default_eink",
-        "large_file_threshold_mb": 10,
-        "skip_large_files": True,
-        "log_level": "DEBUG",  # Use DEBUG to see all messages
-        "epub_metadata": {
-            "author": "Test Author",
-            "language": "en",
-            "publisher": "Test Publisher",
-        },
-    }
+    config = {**default_config, "log_level": "DEBUG"}
 
     # Convert the project
     convert_project_to_epub(sample_project_dir, temp_output_file, config)
@@ -174,14 +154,14 @@ def test_ignored_files(sample_project_dir, temp_output_file):
             assert "package.json" not in content
 
 
-def test_custom_title_and_author(sample_project_dir, temp_output_file):
+def test_custom_title_and_author(
+    sample_project_dir,
+    temp_output_file,
+    default_config,
+):
     """Test that custom title and author are used in the EPUB."""
-    # Define config with custom title and author
     config = {
-        "default_theme": "default_eink",
-        "large_file_threshold_mb": 10,
-        "skip_large_files": True,
-        "log_level": "INFO",
+        **default_config,
         "title": "Custom Project Title",
         "author": "Custom Author Name",
         "epub_metadata": {"language": "en", "publisher": "Test Publisher"},

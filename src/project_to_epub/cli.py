@@ -10,21 +10,8 @@ import typer
 from typing_extensions import Annotated
 
 from project_to_epub import __version__
+from project_to_epub.config import DEFAULT_CONFIG, ConversionConfig
 from project_to_epub.converter import convert_project_to_epub
-
-# Default configuration
-DEFAULT_CONFIG = {
-    "output_directory": ".",
-    "default_theme": "default_eink",
-    "large_file_threshold_mb": 10,
-    "skip_large_files": True,
-    "log_level": "INFO",
-    "epub_metadata": {
-        "author": "Project-to-EPUB Tool",
-        "language": "en",
-        "publisher": "Project-to-EPUB v1.0",
-    },
-}
 
 app = typer.Typer(
     help=(
@@ -39,6 +26,71 @@ def version_callback(value: bool):
     if value:
         typer.echo(f"project-to-epub version: {__version__}")
         raise typer.Exit()
+
+
+def configure_logging(log_level: str) -> None:
+    """Configure logging from a CLI log-level value."""
+    numeric_level = getattr(logging, log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        typer.echo(f"Invalid log level: {log_level}", err=True)
+        raise typer.Exit(code=1)
+    logging.basicConfig(level=numeric_level, format="%(levelname)s: %(message)s")
+
+
+def resolve_input_directory(input_directory: Optional[Path]) -> Path:
+    """Resolve and validate the input directory."""
+    if input_directory is None:
+        input_directory = Path.cwd()
+        logging.info(
+            f"No input directory specified, using current directory: {input_directory}"
+        )
+
+    resolved_directory = input_directory.resolve()
+    if not resolved_directory.exists() or not resolved_directory.is_dir():
+        error_message = (
+            f"Error: Input directory '{resolved_directory}' does not exist or "
+            "is not a directory"
+        )
+        typer.echo(error_message, err=True)
+        raise typer.Exit(code=1)
+
+    return resolved_directory
+
+
+def resolve_output_path(input_directory: Path, output: Optional[Path]) -> Path:
+    """Resolve the final EPUB output path."""
+    folder_name = input_directory.name
+    if output is None:
+        return Path.cwd() / f"{folder_name}.epub"
+    if output.is_dir():
+        return output / f"{folder_name}.epub"
+    return output
+
+
+def build_config_from_cli(
+    theme: Optional[str],
+    title: Optional[str],
+    author: Optional[str],
+    limit_mb: Optional[float],
+    no_skip_large: bool,
+    hierarchical_toc: bool,
+) -> ConversionConfig:
+    """Build conversion config from CLI options."""
+    config = {
+        **DEFAULT_CONFIG,
+        "epub_metadata": dict(DEFAULT_CONFIG["epub_metadata"]),
+        "theme": theme,
+        "title": title,
+        "author": author,
+        "large_file_threshold_mb": (
+            limit_mb
+            if limit_mb is not None
+            else DEFAULT_CONFIG["large_file_threshold_mb"]
+        ),
+        "skip_large_files": not no_skip_large,
+        "flat_toc": not hierarchical_toc,
+    }
+    return ConversionConfig.from_mapping(config)
 
 
 @app.command()
@@ -88,71 +140,18 @@ def main(
     table of contents, applies syntax highlighting to code files, and respects
     .gitignore rules.
     """
-    # Setup logging
-    numeric_level = getattr(logging, log_level.upper(), None)
-    if not isinstance(numeric_level, int):
-        typer.echo(f"Invalid log level: {log_level}", err=True)
-        raise typer.Exit(code=1)
-    logging.basicConfig(level=numeric_level, format="%(levelname)s: %(message)s")
+    configure_logging(log_level)
+    input_directory = resolve_input_directory(input_directory)
+    output = resolve_output_path(input_directory, output)
+    config = build_config_from_cli(
+        theme,
+        title,
+        author,
+        limit_mb,
+        no_skip_large,
+        hierarchical_toc,
+    )
 
-    # Handle input directory
-    if input_directory is None:
-        input_directory = Path.cwd()
-        logging.info(
-            f"No input directory specified, using current directory: {input_directory}"
-        )
-
-    # Resolve to absolute path to handle relative paths like "." or ".."
-    input_directory = input_directory.resolve()
-
-    # Validate input directory
-    if not input_directory.exists() or not input_directory.is_dir():
-        error_message = (
-            f"Error: Input directory '{input_directory}' does not exist or "
-            "is not a directory"
-        )
-        typer.echo(
-            error_message,
-            err=True,
-        )
-        raise typer.Exit(code=1)
-
-    # Get the folder name from the resolved absolute path
-    folder_name = input_directory.name
-
-    # Handle output path
-    if output is None:
-        # Default: create in current directory with folder name
-        output = Path.cwd() / f"{folder_name}.epub"
-    elif output.is_dir():
-        # If output is a directory, append the folder name
-        output = output / f"{folder_name}.epub"
-
-    # Prepare configuration with defaults and CLI overrides
-    config = DEFAULT_CONFIG.copy()
-
-    # Apply CLI overrides (only for non-None values)
-    cli_overrides = {
-        "theme": theme,
-        "title": title,
-        "author": author,
-        "large_file_threshold_mb": limit_mb,
-        "skip_large_files": not no_skip_large,
-        "flat_toc": not hierarchical_toc,  # Invert the flag for user-friendliness
-    }
-
-    for key, value in cli_overrides.items():
-        if value is not None:
-            if key.startswith("epub_metadata_"):
-                # Handle nested metadata fields
-                meta_key = key.replace("epub_metadata_", "")
-                if "epub_metadata" not in config:
-                    config["epub_metadata"] = {}
-                config["epub_metadata"][meta_key] = value
-            else:
-                config[key] = value
-
-    # Convert the project
     try:
         result = convert_project_to_epub(input_directory, output, config)
         typer.echo(result)

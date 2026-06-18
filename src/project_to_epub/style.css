@@ -1,0 +1,180 @@
+body {
+    margin: 0;
+    padding: 1em;
+    background-color: #FFFFFF;
+    color: #000000;
+    font-family: monospace;
+}
+
+h1 {
+    font-size: 1.5em;
+    margin: 0.5em 0;
+}
+
+pre {
+    margin: 0;
+    padding: 0.5em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    font-family: monospace;
+    font-size: 0.9em;
+    line-height: 1.5;
+    tab-size: 4;
+    background-color: #FFFFFF;
+    color: #000000;
+    border: 1px solid #000000;
+    border-radius: 0;
+}
+
+.filepath {
+    font-weight: bold;
+    padding: 0.5em;
+    margin-bottom: 0.5em;
+    border-bottom: 1px solid #000000;
+}
+
+.highlight,
+.codehilite {
+    background-color: #FFFFFF;
+    color: #000000;
+}
+
+.highlighttable,
+.codehilitetable {
+    border: 1px solid #000000;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.highlighttable td,
+.codehilitetable td {
+    padding: 0;
+    vertical-align: top;
+}
+
+.highlighttable pre,
+.codehilitetable pre {
+    border: none;
+    margin: 0;
+}
+
+.linenos {
+    border-right: 1px solid #000000;
+    user-select: none;
+    white-space: nowrap;
+    width: auto;
+}
+
+.linenodiv {
+    white-space: nowrap;
+}
+
+.linenos pre {
+    overflow-wrap: normal;
+    padding: 0.5em 0;
+    text-align: right;
+    white-space: pre;
+    word-wrap: normal;
+}
+
+.linenos span {
+    padding-left: 0.2em !important;
+    padding-right: 0.35em !important;
+}
+
+.toc-title {
+    font-size: 2em;
+    margin-bottom: 1em;
+}
+
+.toc-list {
+    list-style-type: none;
+    padding-left: 1em;
+}
+
+.toc-list li {
+    margin-bottom: 0.5em;
+}
+
+.toc-section {
+    font-weight: bold;
+    margin-top: 1em;
+}
+
+.toc-directory {
+    font-weight: bold;
+    color: inherit;
+}
+
+/* Markdown specific styles */
+.markdown-content {
+    font-family: serif;
+    line-height: 1.6;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.markdown-content p {
+    margin-bottom: 1em;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    padding-left: 2em;
+    margin-bottom: 1em;
+}
+
+.markdown-content li {
+    margin-bottom: 0.5em;
+}
+
+.markdown-content code {
+    background-color: #FFFFFF;
+    padding: 0.2em 0.4em;
+    border: 1px solid #000000;
+    border-radius: 0;
+    font-family: monospace;
+}
+
+.markdown-content pre {
+    background-color: #FFFFFF;
+    color: #000000;
+    padding: 1em;
+    border-radius: 0;
+    margin-bottom: 1em;
+    border: 1px solid #000000;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #000000;
+    padding-left: 1em;
+    margin-left: 0;
+    color: inherit;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1em;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid #000000;
+    padding: 0.5em;
+    text-align: left;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+}
