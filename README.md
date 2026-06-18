@@ -37,7 +37,7 @@ This will create an EPUB file named after your project directory in the current 
 ### Command-line options
 
 ```
-Usage: project-to-epub [OPTIONS] INPUT_DIRECTORY
+Usage: project-to-epub [OPTIONS] [INPUT_DIRECTORY]
 
   Convert a software project directory into an EPUB file for offline code reading.
 
@@ -45,7 +45,7 @@ Usage: project-to-epub [OPTIONS] INPUT_DIRECTORY
   contents, applies syntax highlighting to code files, and respects .gitignore rules.
 
 Arguments:
-  INPUT_DIRECTORY  Path to the project directory to convert  [required]
+  INPUT_DIRECTORY  Path to the project directory to convert. Defaults to the current directory.
 
 Options:
   -o, --output PATH               Output EPUB file path
@@ -56,7 +56,8 @@ Options:
   --title TEXT                    Set EPUB title (defaults to project directory name)
   --author TEXT                   Set EPUB author
   --limit-mb FLOAT                Set large file threshold in MB
-  --no-skip-large                 Error out on large files instead of skipping
+  --no-skip-large                 Include large files instead of skipping
+  --hierarchical-toc              Use a hierarchical table of contents
   --version                       Show version and exit
   --help                          Show this message and exit.
 ```
@@ -88,6 +89,7 @@ The tool uses sensible defaults but can be customized using command-line options
 - **Theme**: Default is `default_eink`, a high-contrast theme optimized for e-ink displays.
 - **Output File**: Defaults to `<project_name>.epub` in the current directory.
 - **File Size Handling**: Files larger than 10MB are skipped by default.
+- **Table of Contents**: Defaults to a flat TOC. Use `--hierarchical-toc` to group entries by directory.
 - **Metadata**: Title defaults to the project directory name. Author defaults to "Project-to-EPUB Tool".
 
 All settings can be customized via command-line options as shown in the usage section.

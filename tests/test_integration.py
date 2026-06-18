@@ -239,3 +239,76 @@ def test_special_characters_generate_parseable_epub(tmp_path):
     assert book.get_metadata("DC", "title")[0][0] == 'A & B <Book> "Sample"'
     assert book.get_metadata("DC", "creator")[0][0] == 'C "D" & <E>'
     assert book.get_metadata("DC", "publisher")[0][0] == "P & Co <Test>"
+
+
+def test_large_markdown_skip_is_reported_and_excluded(tmp_path):
+    """Large Markdown files should be skipped and counted in the summary."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "big.md").write_text("# Big\n" + ("x" * 2048), encoding="utf-8")
+    (project_dir / "small.py").write_text("print('small')\n", encoding="utf-8")
+
+    output_file = tmp_path / "large-skip.epub"
+    result = convert_project_to_epub(
+        project_dir,
+        output_file,
+        {
+            "default_theme": "default_eink",
+            "large_file_threshold_mb": 0.001,
+            "skip_large_files": True,
+        },
+    )
+
+    assert "- Processed 1 files" in result
+    assert "- Skipped 1 files" in result
+
+    with zipfile.ZipFile(output_file, "r") as zip_ref:
+        epub_text = "\n".join(
+            zip_ref.read(name).decode("utf-8", errors="replace")
+            for name in zip_ref.namelist()
+            if name.endswith(".xhtml")
+        )
+
+    assert "small.py" in epub_text
+    assert "big.md" not in epub_text
+
+
+def test_hierarchical_toc_directory_ncx_targets_descendant_files(tmp_path):
+    """Directory NCX entries should target the first nested file, not #."""
+    project_dir = tmp_path / "project"
+    nested_dir = project_dir / "a" / "b"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "c.py").write_text("print('nested')\n", encoding="utf-8")
+
+    output_file = tmp_path / "hierarchical.epub"
+    convert_project_to_epub(
+        project_dir,
+        output_file,
+        {
+            "default_theme": "default_eink",
+            "large_file_threshold_mb": 10,
+            "skip_large_files": True,
+            "flat_toc": False,
+        },
+    )
+
+    parsed_documents = parse_epub_xml_documents(output_file)
+    ncx = parsed_documents["EPUB/toc.ncx"]
+    ncx_namespace = {"ncx": "http://www.daisy.org/z3986/2005/ncx/"}
+    content_sources = [
+        content.attrib["src"]
+        for content in ncx.findall(".//ncx:content", ncx_namespace)
+    ]
+    play_orders_by_source = {}
+    for nav_point in ncx.findall(".//ncx:navPoint", ncx_namespace):
+        content = nav_point.find("ncx:content", ncx_namespace)
+        if content is None:
+            continue
+        play_orders_by_source.setdefault(content.attrib["src"], set()).add(
+            nav_point.attrib["playOrder"]
+        )
+
+    assert content_sources
+    assert "#" not in content_sources
+    assert all(source == "file_0.xhtml" for source in content_sources)
+    assert play_orders_by_source == {"file_0.xhtml": {"1"}}

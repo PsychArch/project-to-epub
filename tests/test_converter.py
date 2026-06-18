@@ -139,3 +139,45 @@ def test_project_is_ignored(filename, should_be_ignored):
 
         # Test the path
         assert project.is_ignored(temp_path / filename) is should_be_ignored
+
+
+def test_nested_gitignore_rules_are_respected():
+    """Nested .gitignore files should apply relative to their own directory."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        subdir = temp_path / "sub"
+        subdir.mkdir()
+
+        (subdir / ".gitignore").write_text("secret.py\n", encoding="utf-8")
+        (subdir / "secret.py").write_text("print('secret')\n", encoding="utf-8")
+        (subdir / "keep.py").write_text("print('keep')\n", encoding="utf-8")
+
+        project = Project(temp_path, {"large_file_threshold_mb": 10})
+
+        assert project.is_ignored(subdir / "secret.py") is True
+        assert project.is_ignored(subdir / "keep.py") is False
+        assert [str(file.relative_path) for file in project.scan_files()] == [
+            "sub/keep.py"
+        ]
+
+
+def test_large_markdown_and_code_files_are_skipped():
+    """The large-file limit should apply before Markdown/code branching."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        (temp_path / "big.md").write_text("# Big\n" + ("x" * 2048), encoding="utf-8")
+        (temp_path / "big.py").write_text(
+            "value = '" + ("x" * 2048) + "'\n", encoding="utf-8"
+        )
+        (temp_path / "big.bin").write_bytes(b"\x00" * 2048)
+        (temp_path / "small.py").write_text("print('small')\n", encoding="utf-8")
+
+        project = Project(
+            temp_path,
+            {"large_file_threshold_mb": 0.001, "skip_large_files": True},
+        )
+
+        assert [str(file.relative_path) for file in project.scan_files()] == [
+            "small.py"
+        ]
+        assert project.skipped_files == 2

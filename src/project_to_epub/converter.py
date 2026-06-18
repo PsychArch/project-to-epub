@@ -10,12 +10,12 @@ import zipfile
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-import markdown  # Add markdown import
+import markdown
 import pathspec
 import pygments
-import typer  # Import typer for progress bar
+import typer
 from pygments import lexers
 from pygments.formatters import HtmlFormatter
 
@@ -36,19 +36,19 @@ class Project:
         self.root_dir = root_dir
         self.config = config
         self.files = []  # Will contain FileEntry objects
-        self.gitignore_spec = self._load_gitignore()
+        self.skipped_files = 0
+        self.gitignore_specs = self._load_gitignore_specs()
+        self.gitignore_spec = self.gitignore_specs[0][1]
 
-    def _load_gitignore(self) -> pathspec.PathSpec:
+    def _load_gitignore(self, gitignore_path: Path) -> pathspec.PathSpec:
         """
-        Load .gitignore specs from project files.
+        Load a single .gitignore spec.
 
         Returns:
             pathspec.PathSpec: A compiled spec for matching paths
         """
         patterns = []
 
-        # Start with .gitignore at the root
-        gitignore_path = self.root_dir / ".gitignore"
         if gitignore_path.exists():
             try:
                 with open(gitignore_path, "r", encoding="utf-8") as f:
@@ -56,9 +56,23 @@ class Project:
             except Exception as e:
                 logger.warning(f"Could not read .gitignore at {gitignore_path}: {e}")
 
-        # TODO: Add support for scanning nested .gitignore files
-
         return pathspec.GitIgnoreSpec.from_lines(patterns)
+
+    def _load_gitignore_specs(self) -> List[Tuple[Path, pathspec.PathSpec]]:
+        """Load root and nested .gitignore specs with their base directories."""
+        specs = [(self.root_dir, self._load_gitignore(self.root_dir / ".gitignore"))]
+
+        for root, dirs, files in os.walk(self.root_dir):
+            if ".git" in dirs:
+                dirs.remove(".git")
+
+            root_path = Path(root)
+            if root_path == self.root_dir or ".gitignore" not in files:
+                continue
+
+            specs.append((root_path, self._load_gitignore(root_path / ".gitignore")))
+
+        return specs
 
     def is_ignored(self, path: Path) -> bool:
         """
@@ -74,10 +88,36 @@ class Project:
         if ".git" in path.parts:
             return True
 
-        # Convert absolute path to relative path from project root
-        relative_path = path.relative_to(self.root_dir)
-        # Check if the path matches any gitignore pattern
-        return self.gitignore_spec.match_file(str(relative_path))
+        for base_dir, spec in self.gitignore_specs:
+            try:
+                relative_path = path.relative_to(base_dir)
+            except ValueError:
+                continue
+
+            if spec.match_file(str(relative_path)):
+                return True
+
+        return False
+
+    def _is_large_file(self, file_path: Path, threshold_bytes: float) -> bool:
+        """Return True when a file exceeds the configured large-file threshold."""
+        try:
+            file_size = file_path.stat().st_size
+        except Exception as e:
+            logger.warning(f"Error checking file size for {file_path}: {e}")
+            return True
+
+        if file_size <= threshold_bytes:
+            return False
+
+        size_mb = file_size / 1024 / 1024
+        if self.config.get("skip_large_files", True):
+            logger.warning(f"Skipping large file ({size_mb:.2f} MB): {file_path}")
+            self.skipped_files += 1
+            return True
+
+        logger.warning(f"Including large file ({size_mb:.2f} MB): {file_path}")
+        return False
 
     def scan_files(self) -> List["FileEntry"]:
         """
@@ -87,6 +127,7 @@ class Project:
             List[FileEntry]: List of file entries to include
         """
         self.files = []
+        self.skipped_files = 0
 
         # Get the large file threshold in bytes
         large_file_threshold = (
@@ -124,42 +165,22 @@ class Project:
 
                 # Special handling for Markdown files
                 if ext == ".md" or ext == ".markdown":
-                    relative_path = file_path.relative_to(self.root_dir)
-                    self.files.append(FileEntry(file_path, relative_path, "markdown"))
-                    continue
-
-                # Try to get lexer for code files
-                try:
-                    lexer = lexers.get_lexer_for_filename(file_path)
-
-                    # Check file size
+                    language = "markdown"
+                else:
+                    # Try to get lexer for code files
                     try:
-                        file_size = file_path.stat().st_size
-                        if file_size > large_file_threshold:
-                            size_mb = file_size / 1024 / 1024
-                            if self.config.get("skip_large_files", True):
-                                logger.warning(
-                                    "Skipping large file "
-                                    f"({size_mb:.2f} MB): {file_path}"
-                                )
-                                continue
-                            else:
-                                logger.warning(
-                                    "Including large file "
-                                    f"({size_mb:.2f} MB): {file_path}"
-                                )
-                    except Exception as e:
-                        logger.warning(f"Error checking file size for {file_path}: {e}")
+                        language = lexers.get_lexer_for_filename(file_path).name
+                    except pygments.util.ClassNotFound:
+                        # Not a recognized code file
+                        logger.debug(f"Skipping non-code file: {file_path}")
                         continue
 
-                    # Add to list of files to include
-                    relative_path = file_path.relative_to(self.root_dir)
-                    self.files.append(FileEntry(file_path, relative_path, lexer.name))
-
-                except pygments.util.ClassNotFound:
-                    # Not a recognized code file
-                    logger.debug(f"Skipping non-code file: {file_path}")
+                if self._is_large_file(file_path, large_file_threshold):
                     continue
+
+                # Add to list of files to include
+                relative_path = file_path.relative_to(self.root_dir)
+                self.files.append(FileEntry(file_path, relative_path, language))
 
         logger.info(f"Found {len(self.files)} files to include in the EPUB")
         return self.files
@@ -605,26 +626,37 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
     </docTitle>
     <navMap>"""]
 
+    def first_descendant_href(item) -> str:
+        if item.get("href"):
+            return item["href"]
+
+        for child in item.get("children", []):
+            href = first_descendant_href(child)
+            if href:
+                return href
+
+        return "#"
+
     play_order = 1
+    play_order_by_href = {}
+
+    def play_order_for_href(href: str) -> int:
+        nonlocal play_order
+
+        if href not in play_order_by_href:
+            play_order_by_href[href] = play_order
+            play_order += 1
+
+        return play_order_by_href[href]
 
     # Recursive function to process hierarchical items
     def add_nav_point(item, level=0):
-        nonlocal play_order
-        current_play_order = play_order
-        play_order += 1
-
         indent = "    " * (level + 2)
 
         # If it's a directory (has children)
         if item.get("is_directory", False):
-            # For directories with children
-            first_child_href = "#"
-            if item.get("children") and len(item["children"]) > 0:
-                # Find the first child with an href
-                for child in item["children"]:
-                    if child.get("href"):
-                        first_child_href = child["href"]
-                        break
+            first_child_href = first_descendant_href(item)
+            current_play_order = play_order_for_href(first_child_href)
 
             nav_point_open = (
                 f'{indent}<navPoint id="{item["id"]}" '
@@ -646,6 +678,7 @@ def generate_toc_ncx(toc_items: List[Dict], title: str, identifier: str) -> str:
         else:
             # For regular file items
             if "href" in item:
+                current_play_order = play_order_for_href(item["href"])
                 nav_point_open = (
                     f'{indent}<navPoint id="{item["id"]}" '
                     f'playOrder="{current_play_order}">'
@@ -755,6 +788,7 @@ def convert_project_to_epub(
 
     # Scan for files
     project.scan_files()
+    skipped_files = project.skipped_files
 
     # Get total number of files for progress bar
     total_files = len(project.files)
