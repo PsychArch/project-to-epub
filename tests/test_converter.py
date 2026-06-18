@@ -66,6 +66,8 @@ def test_get_epub_css():
     assert "#f0f0f0" not in css
     assert "#ccc" not in css
     assert "#555" not in css
+    assert "min-width: 4ch" not in css
+    assert ".linenos span" in css
 
 
 def test_highlight_code():

@@ -373,12 +373,16 @@ def get_css_for_epub() -> str:
     }
 
     .linenos pre {
-        min-width: 4ch;
         overflow-wrap: normal;
         padding: 0.5em 0;
         text-align: right;
         white-space: pre;
         word-wrap: normal;
+    }
+
+    .linenos span {
+        padding-left: 0.2em !important;
+        padding-right: 0.35em !important;
     }
 
     .toc-title {
