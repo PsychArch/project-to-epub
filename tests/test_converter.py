@@ -2,6 +2,7 @@
 Tests for the converter module.
 """
 
+import re
 import tempfile
 from pathlib import Path
 
@@ -13,7 +14,20 @@ from project_to_epub.converter import (
     create_highlight_formatter,
     get_css_for_epub,
     highlight_code,
+    render_markdown,
 )
+
+
+def assert_uses_only_black_white_hex_colors(html: str) -> None:
+    hex_colors = set(re.findall(r"#[0-9a-fA-F]{3,6}", html))
+    assert hex_colors <= {"#000000", "#FFFFFF", "#ffffff"}
+
+
+def assert_has_no_colored_inline_styles(html: str) -> None:
+    color_values = re.findall(r"(?<!-)color:\s*([^;\"']+)", html)
+    assert all(
+        value.strip() in {"inherit", "#000000", "#FFFFFF"} for value in color_values
+    )
 
 
 def test_create_highlight_formatter():
@@ -21,10 +35,10 @@ def test_create_highlight_formatter():
     # Test default e-ink theme
     formatter = create_highlight_formatter("default_eink")
     assert isinstance(formatter, HtmlFormatter)
-    # In newer Pygments versions, formatter.style is now the actual Style class
-    assert formatter.style.__name__ == "DefaultStyle" or formatter.style == "default"
+    assert formatter.style.__name__ == "EInkMonochromeStyle"
     assert formatter.noclasses is True
     assert formatter.nobackground is True
+    assert formatter.linenos
 
     # Test standard theme
     formatter = create_highlight_formatter("monokai")
@@ -48,6 +62,10 @@ def test_get_epub_css():
     assert "color: #000000" in css
     assert "pre" in css
     assert ".markdown-content" in css
+    assert "#f8f8f8" not in css
+    assert "#f0f0f0" not in css
+    assert "#ccc" not in css
+    assert "#555" not in css
 
 
 def test_highlight_code():
@@ -68,6 +86,44 @@ def test_highlight_code():
     assert "def" in html
     assert "hello_world" in html
     assert "print" in html
+
+
+def test_default_eink_highlighting_uses_monochrome_styles():
+    """Default e-ink highlighting should not emit color-token styling."""
+    from pygments.lexers import PythonLexer
+
+    code = "import os\n\ndef hello_world():\n    # greet\n    return 'Hello'\n"
+    formatter = create_highlight_formatter("default_eink")
+    html = highlight_code(code, PythonLexer(), formatter)
+
+    assert_uses_only_black_white_hex_colors(html)
+    assert_has_no_colored_inline_styles(html)
+    assert "background:" not in html
+    assert 'class="linenos"' in html
+    assert 'class="highlighttable"' in html
+    assert "font-weight: bold" in html
+    assert "font-style: italic" in html
+
+
+def test_markdown_fenced_code_uses_default_eink_formatter():
+    """Markdown fenced code should use the same monochrome token style."""
+    markdown = """# Notes
+
+```python
+def hello_world():
+    # greet
+    return "Hello"
+```
+"""
+    formatter = create_highlight_formatter("default_eink")
+    html = render_markdown(markdown, formatter)
+
+    assert_uses_only_black_white_hex_colors(html)
+    assert_has_no_colored_inline_styles(html)
+    assert 'class="linenos"' in html
+    assert 'class="codehilitetable"' in html
+    assert "font-weight: bold" in html
+    assert "font-style: italic" in html
 
 
 def test_project_init():

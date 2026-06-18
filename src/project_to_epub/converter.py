@@ -18,8 +18,32 @@ import pygments
 import typer
 from pygments import lexers
 from pygments.formatters import HtmlFormatter
+from pygments.style import Style
+from pygments.token import Comment, Generic, Keyword, Name, Operator
 
 logger = logging.getLogger(__name__)
+
+
+class EInkMonochromeStyle(Style):
+    """Pygments style that preserves syntax cues without color."""
+
+    background_color = "#FFFFFF"
+    default_style = ""
+    styles = {
+        Comment: "italic",
+        Generic.Deleted: "underline",
+        Generic.Emph: "italic",
+        Generic.Error: "bold underline",
+        Generic.Heading: "bold",
+        Generic.Inserted: "bold",
+        Generic.Strong: "bold",
+        Generic.Subheading: "bold",
+        Keyword: "bold",
+        Name.Class: "bold",
+        Name.Function: "bold",
+        Name.Namespace: "bold",
+        Operator.Word: "bold",
+    }
 
 
 class Project:
@@ -239,11 +263,10 @@ def create_highlight_formatter(theme_name: str) -> HtmlFormatter:
     """
     # Handle the special default_eink theme
     if theme_name == "default_eink":
-        # Create a high-contrast formatter for e-ink
         return HtmlFormatter(
-            style="default",
+            style=EInkMonochromeStyle,
             cssclass="highlight",
-            linenos=False,  # Remove line numbers for better e-ink display
+            linenos=True,
             full=False,
             noclasses=True,
             nobackground=True,
@@ -254,7 +277,7 @@ def create_highlight_formatter(theme_name: str) -> HtmlFormatter:
         return HtmlFormatter(
             style=theme_name,
             cssclass="highlight",
-            linenos=False,  # Remove line numbers for better e-ink display
+            linenos=True,
             full=False,
             noclasses=True,  # Inline styles for better compatibility
         )
@@ -263,7 +286,7 @@ def create_highlight_formatter(theme_name: str) -> HtmlFormatter:
         return HtmlFormatter(
             style="default",
             cssclass="highlight",
-            linenos=False,  # Remove line numbers for better e-ink display
+            linenos=True,
             full=False,
             noclasses=True,
         )
@@ -295,12 +318,14 @@ def get_css_for_epub() -> str:
         padding: 0.5em;
         white-space: pre-wrap;
         word-wrap: break-word;
+        overflow-wrap: anywhere;
         font-family: monospace;
         font-size: 0.9em;
         line-height: 1.5;
-        overflow-x: auto;
-        background-color: #f8f8f8;
-        border: none;
+        tab-size: 4;
+        background-color: #FFFFFF;
+        color: #000000;
+        border: 1px solid #000000;
         border-radius: 0;
     }
 
@@ -308,11 +333,52 @@ def get_css_for_epub() -> str:
         font-weight: bold;
         padding: 0.5em;
         margin-bottom: 0.5em;
-        border-bottom: 1px solid #ccc;
+        border-bottom: 1px solid #000000;
     }
 
-    .highlight {
+    .highlight,
+    .codehilite {
         background-color: #FFFFFF;
+        color: #000000;
+    }
+
+    .highlighttable,
+    .codehilitetable {
+        border: 1px solid #000000;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    .highlighttable td,
+    .codehilitetable td {
+        padding: 0;
+        vertical-align: top;
+    }
+
+    .highlighttable pre,
+    .codehilitetable pre {
+        border: none;
+        margin: 0;
+    }
+
+    .linenos {
+        border-right: 1px solid #000000;
+        user-select: none;
+        white-space: nowrap;
+        width: auto;
+    }
+
+    .linenodiv {
+        white-space: nowrap;
+    }
+
+    .linenos pre {
+        min-width: 4ch;
+        overflow-wrap: normal;
+        padding: 0.5em 0;
+        text-align: right;
+        white-space: pre;
+        word-wrap: normal;
     }
 
     .toc-title {
@@ -336,7 +402,7 @@ def get_css_for_epub() -> str:
 
     .toc-directory {
         font-weight: bold;
-        color: #333;
+        color: inherit;
     }
 
     /* Markdown specific styles */
@@ -370,26 +436,27 @@ def get_css_for_epub() -> str:
     }
 
     .markdown-content code {
-        background-color: #f0f0f0;
+        background-color: #FFFFFF;
         padding: 0.2em 0.4em;
-        border-radius: 3px;
+        border: 1px solid #000000;
+        border-radius: 0;
         font-family: monospace;
     }
 
     .markdown-content pre {
-        background-color: #f8f8f8;
+        background-color: #FFFFFF;
+        color: #000000;
         padding: 1em;
         border-radius: 0;
-        overflow-x: auto;
         margin-bottom: 1em;
-        border: none;
+        border: 1px solid #000000;
     }
 
     .markdown-content blockquote {
-        border-left: 4px solid #ccc;
+        border-left: 4px solid #000000;
         padding-left: 1em;
         margin-left: 0;
-        color: #555;
+        color: inherit;
     }
 
     .markdown-content table {
@@ -400,7 +467,7 @@ def get_css_for_epub() -> str:
 
     .markdown-content th,
     .markdown-content td {
-        border: 1px solid #ccc;
+        border: 1px solid #000000;
         padding: 0.5em;
         text-align: left;
     }
@@ -483,21 +550,32 @@ def highlight_code(content: str, lexer, formatter: HtmlFormatter) -> str:
         return f'<pre class="highlight">{escape(content)}</pre>'
 
 
-def render_markdown(content: str) -> str:
+def render_markdown(content: str, formatter: Optional[HtmlFormatter] = None) -> str:
     """
     Render Markdown content to HTML.
 
     Args:
         content: Markdown content
+        formatter: Pygments formatter to use for fenced code blocks
 
     Returns:
         str: HTML content
     """
+    if formatter is None:
+        formatter = create_highlight_formatter("default_eink")
+
     try:
         # Use the Python Markdown library to convert markdown to HTML
         html = markdown.markdown(
             content,
             extensions=["tables", "fenced_code", "codehilite"],
+            extension_configs={
+                "codehilite": {
+                    "linenums": formatter.linenos,
+                    "noclasses": formatter.noclasses,
+                    "pygments_style": formatter.style,
+                }
+            },
             output_format="xhtml",
         )
         return f"<div class='markdown-content'>{html}</div>"
@@ -871,7 +949,7 @@ def convert_project_to_epub(
                     # Create HTML content based on file type
                     if file_entry.language == "markdown":
                         # Process markdown files
-                        html_content = render_markdown(content)
+                        html_content = render_markdown(content, formatter)
                     else:
                         # Process code files with syntax highlighting
                         try:

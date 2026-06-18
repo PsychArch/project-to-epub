@@ -15,6 +15,11 @@ from project_to_epub.converter import convert_project_to_epub
 EPUB_XML_SUFFIXES = (".opf", ".xhtml", ".ncx", ".xml")
 
 
+def assert_uses_only_black_white_hex_colors(html):
+    hex_colors = set(re.findall(r"#[0-9a-fA-F]{3,6}", html))
+    assert hex_colors <= {"#000000", "#FFFFFF", "#ffffff"}
+
+
 def parse_epub_xml_documents(epub_path):
     """Parse all XML-based files in an EPUB and return parsed roots by path."""
     parsed = {}
@@ -106,6 +111,12 @@ def test_convert_sample_project(sample_project_dir, temp_output_file):
 
         # Verify we have HTML files
         assert len(html_files) > 0, "No HTML files found"
+
+        for html_file in html_files:
+            with open(html_file, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            assert_uses_only_black_white_hex_colors(html_content)
+            assert "color: #" not in html_content.lower()
 
         # Check for CSS file
         css_files = []

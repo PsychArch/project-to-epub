@@ -86,7 +86,7 @@ project-to-epub /path/to/project --title "My Awesome Project" --author "Jane Dev
 
 The tool uses sensible defaults but can be customized using command-line options:
 
-- **Theme**: Default is `default_eink`, a high-contrast theme optimized for e-ink displays.
+- **Theme**: Default is `default_eink`, a monochrome high-contrast theme optimized for black-white e-ink displays.
 - **Output File**: Defaults to `<project_name>.epub` in the current directory.
 - **File Size Handling**: Files larger than 10MB are skipped by default.
 - **Table of Contents**: Defaults to a flat TOC. Use `--hierarchical-toc` to group entries by directory.
