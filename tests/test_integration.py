@@ -7,12 +7,55 @@ import re
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import PurePosixPath, PureWindowsPath
 
+import pytest
 from ebooklib import epub
 
-from project_to_epub.converter import convert_project_to_epub
+from project_to_epub import toc
+from project_to_epub.converter import Project, convert_project_to_epub
+from project_to_epub.models import FileEntry
 
 EPUB_XML_SUFFIXES = (".opf", ".xhtml", ".ncx", ".xml")
+
+
+@pytest.mark.parametrize("path_type", [PurePosixPath, PureWindowsPath])
+@pytest.mark.parametrize("flat_toc", [True, False])
+def test_epub_paths_use_forward_slashes(tmp_path, monkeypatch, path_type, flat_toc):
+    """Windows paths must not duplicate directories in any TOC document."""
+    project_dir = tmp_path / "project"
+    source = project_dir / "src" / "dir" / "main.c"
+    source.parent.mkdir(parents=True)
+    source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    relative_path = path_type("src/dir/main.c")
+
+    def scan_files(project):
+        project.files = [FileEntry(source, relative_path, "c")]
+        return project.files
+
+    monkeypatch.setattr(Project, "scan_files", scan_files)
+    monkeypatch.setattr(toc, "Path", path_type)
+    output_file = tmp_path / "paths.epub"
+    convert_project_to_epub(project_dir, output_file, {"flat_toc": flat_toc})
+
+    documents = parse_epub_xml_documents(output_file)
+    xhtml_ns = {"x": "http://www.w3.org/1999/xhtml"}
+    ncx_ns = {"n": "http://www.daisy.org/z3986/2005/ncx/"}
+    expected_labels = ["src/dir/main.c"]
+    if not flat_toc:
+        expected_labels = ["src", "dir"] + expected_labels
+
+    for filename in ("nav.xhtml", "toc_page.xhtml"):
+        labels = documents[f"EPUB/{filename}"].findall(".//x:li/*", xhtml_ns)
+        assert [
+            node.text for node in labels if node.tag.endswith(("a", "span"))
+        ] == expected_labels
+    ncx_labels = documents["EPUB/toc.ncx"].findall(".//n:navLabel/n:text", ncx_ns)
+    assert [node.text for node in ncx_labels] == expected_labels
+
+    chapter = documents["EPUB/file_0.xhtml"]
+    assert chapter.find(".//x:title", xhtml_ns).text == "src/dir/main.c"
+    assert chapter.find(".//x:h1", xhtml_ns).text == "src/dir/main.c"
 
 
 def assert_uses_only_black_white_hex_colors(html):

@@ -133,6 +133,7 @@ def render_project_file(
         return None
 
     html_content = render_source_content(file_entry, content, formatter)
+    relative_path = file_entry.relative_path.as_posix()
     file_id = f"file_{file_index}"
     file_name = f"{file_id}.xhtml"
     write_text_file(
@@ -144,13 +145,13 @@ def render_project_file(
         html_file=HtmlFile(
             id=file_id,
             file=file_name,
-            title=str(file_entry.relative_path),
+            title=relative_path,
         ),
         toc_item=TocItem(
             id=file_id,
-            title=str(file_entry.relative_path),
+            title=relative_path,
             href=file_name,
-            path=str(file_entry.relative_path),
+            path=relative_path,
         ),
     )
 
