@@ -175,7 +175,7 @@ def render_source_content(
 
 def render_file_xhtml(relative_path: Path, html_content: str) -> str:
     """Render a complete XHTML page for one project file."""
-    escaped_relative_path = escape(str(relative_path), quote=True)
+    escaped_relative_path = escape(relative_path.as_posix(), quote=True)
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
